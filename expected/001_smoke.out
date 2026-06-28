@@ -1,0 +1,21 @@
+CREATE EXTENSION
+extension-ok
+schema-ok
+cache_state|r
+catalog_cache|r
+object_annotation|r
+role_policy|r
+statement_log|r
+catalog_json|jsonb
+check_statement|jsonb
+explain_statement|jsonb
+policy_check|jsonb
+relation_json|jsonb
+set_object_annotation|jsonb
+stub
+stub
+not_implemented
+not_implemented
+not_implemented
+not_implemented
+DROP EXTENSION

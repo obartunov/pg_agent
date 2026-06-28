@@ -1,0 +1,4 @@
+comment = 'PostgreSQL extension for agent clients: catalog summaries, statement checks, and audit'
+default_version = '1.0'
+relocatable = false
+superuser = false
