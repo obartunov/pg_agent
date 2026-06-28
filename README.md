@@ -514,7 +514,7 @@ VALUES (
 
 An MCP server is a client-side adapter. It may expose `pg_agent` functions as MCP resources and tools, but the safety decisions should remain in PostgreSQL.
 
-Recommended shape:
+Recommended setup:
 
 ```text
 AI app / MCP host
@@ -807,7 +807,7 @@ It is a general safety feature for generated SQL, ad hoc query tools, and manage
 
 ## Roadmap
 
-### P0: name and public shape
+### P0: name and public API
 
 - Create repository.
 - Publish README.
@@ -956,4 +956,4 @@ Design draft.
 
 No production code yet.
 
-The first goal is to define the shape of the extension, reserve the name, and collect feedback from PostgreSQL, MCP, and generated-SQL tooling communities.
+The first goal is to define the extension scope, reserve the name, and collect feedback from PostgreSQL, MCP, and generated-SQL tooling communities.
