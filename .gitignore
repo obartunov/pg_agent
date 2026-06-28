@@ -5,3 +5,7 @@
 *.log
 tmp/
 .DS_Store
+regression.diffs
+regression.out
+results/
+tmp_check/
