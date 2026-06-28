@@ -79,15 +79,144 @@ STABLE
 SECURITY INVOKER
 SET search_path = pg_catalog, pg_agent
 AS $$
-    SELECT jsonb_build_object(
-        'extension', 'pg_agent',
-        'status', 'stub',
-        'schemas', COALESCE(to_jsonb($1), '[]'::jsonb),
-        'include_comments', $2,
-        'include_indexes', $3,
-        'include_foreign_keys', $4,
-        'include_stats', $5
-    );
+WITH visible_namespaces AS (
+    SELECT n.oid AS nspoid,
+           n.nspname
+    FROM pg_namespace n
+    WHERE n.nspname = ANY(COALESCE($1, ARRAY['public']::name[]))
+      AND has_schema_privilege(n.oid, 'USAGE')
+),
+visible_relations AS (
+    SELECT n.nspoid,
+           n.nspname,
+           c.oid AS reloid,
+           c.relname,
+           c.relkind,
+           c.reltuples::bigint AS estimated_rows,
+           obj_description(c.oid, 'pg_class') AS comment_text
+    FROM visible_namespaces n
+    JOIN pg_class c ON c.relnamespace = n.nspoid
+    WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+      AND has_table_privilege(c.oid, 'SELECT')
+),
+attributes_by_relation AS (
+    SELECT r.reloid,
+           jsonb_agg(
+               jsonb_strip_nulls(
+                   jsonb_build_object(
+                       'name', a.attname,
+                       'attnum', a.attnum,
+                       'type', format_type(a.atttypid, a.atttypmod),
+                       'not_null', a.attnotnull,
+                       'comment',
+                           CASE
+                               WHEN $2 THEN col_description(r.reloid, a.attnum)
+                               ELSE NULL
+                           END
+                   )
+               )
+               ORDER BY a.attnum
+           ) AS attributes
+    FROM visible_relations r
+    JOIN pg_attribute a ON a.attrelid = r.reloid
+    WHERE a.attnum > 0
+      AND NOT a.attisdropped
+      AND has_column_privilege(r.reloid, a.attnum, 'SELECT')
+    GROUP BY r.reloid
+),
+indexes_by_relation AS (
+    SELECT r.reloid,
+           jsonb_agg(
+               jsonb_build_object(
+                   'name', ic.relname,
+                   'unique', i.indisunique,
+                   'primary', i.indisprimary,
+                   'definition', pg_get_indexdef(ic.oid)
+               )
+               ORDER BY ic.relname
+           ) AS indexes
+    FROM visible_relations r
+    JOIN pg_index i ON i.indrelid = r.reloid
+    JOIN pg_class ic ON ic.oid = i.indexrelid
+    WHERE $3
+    GROUP BY r.reloid
+),
+foreign_keys_by_relation AS (
+    SELECT r.reloid,
+           jsonb_agg(
+               jsonb_build_object(
+                   'name', con.conname,
+                   'references', con.confrelid::regclass::text,
+                   'definition', pg_get_constraintdef(con.oid, false)
+               )
+               ORDER BY con.conname
+           ) AS foreign_keys
+    FROM visible_relations r
+    JOIN pg_constraint con ON con.conrelid = r.reloid
+    WHERE $4
+      AND con.contype = 'f'
+    GROUP BY r.reloid
+),
+relations_by_schema AS (
+    SELECT r.nspoid,
+           jsonb_agg(
+               jsonb_strip_nulls(
+                   jsonb_build_object(
+                       'name', r.relname,
+                       'relkind', r.relkind::text,
+                       'estimated_rows',
+                           CASE
+                               WHEN $5 THEN r.estimated_rows
+                               ELSE NULL
+                           END,
+                       'comment',
+                           CASE
+                               WHEN $2 AND r.comment_text IS NOT NULL
+                               THEN jsonb_build_object(
+                                   'text', r.comment_text,
+                                   'source', 'pg_description',
+                                   'trusted_as_instruction', false
+                               )
+                               ELSE NULL
+                           END,
+                       'attributes', COALESCE(a.attributes, '[]'::jsonb),
+                       'indexes',
+                           CASE
+                               WHEN $3 THEN COALESCE(i.indexes, '[]'::jsonb)
+                               ELSE NULL
+                           END,
+                       'foreign_keys',
+                           CASE
+                               WHEN $4 THEN COALESCE(f.foreign_keys, '[]'::jsonb)
+                               ELSE NULL
+                           END
+                   )
+               )
+               ORDER BY r.relname
+           ) AS relations
+    FROM visible_relations r
+    LEFT JOIN attributes_by_relation a ON a.reloid = r.reloid
+    LEFT JOIN indexes_by_relation i ON i.reloid = r.reloid
+    LEFT JOIN foreign_keys_by_relation f ON f.reloid = r.reloid
+    GROUP BY r.nspoid
+)
+SELECT jsonb_build_object(
+    'extension', 'pg_agent',
+    'status', 'ok',
+    'schemas',
+        COALESCE(
+            jsonb_agg(
+                jsonb_build_object(
+                    'name', n.nspname,
+                    'relations', COALESCE(r.relations, '[]'::jsonb)
+                )
+                ORDER BY n.nspname
+            ),
+            '[]'::jsonb
+        )
+)
+FROM visible_namespaces n
+LEFT JOIN relations_by_schema r ON r.nspoid = n.nspoid;
 $$;
 
 CREATE FUNCTION pg_agent.relation_json(relation_oid regclass)

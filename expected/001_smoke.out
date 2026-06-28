@@ -12,10 +12,14 @@ explain_statement|jsonb
 policy_check|jsonb
 relation_json|jsonb
 set_object_annotation|jsonb
+ok
 stub
-stub
 not_implemented
 not_implemented
 not_implemented
 not_implemented
+CREATE TABLE
+catalog-relation-ok
+catalog-attribute-ok
+DROP TABLE
 DROP EXTENSION
