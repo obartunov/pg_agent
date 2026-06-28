@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "pg-agent-local": {
+      "command": "pg-agent-mcp",
+      "args": [
+        "--dsn",
+        "postgresql://app_agent@localhost/appdb"
+      ],
+      "env": {
+        "PGAGENT_MAX_ROWS": "1000"
+      }
+    }
+  }
+}
